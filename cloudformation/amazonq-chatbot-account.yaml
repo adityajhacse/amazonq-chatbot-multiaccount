@@ -101,7 +101,7 @@ Resources:
               StringEquals:
                 'aws:SourceAccount': !Ref 'AWS::AccountId'
       ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/AdministratorAccess'
+        - 'arn:aws:iam::aws:policy/ReadOnlyAccess'
         - 'arn:aws:iam::aws:policy/AmazonQDeveloperAccess'
         - 'arn:aws:iam::aws:policy/AmazonQFullAccess'
       Tags:
