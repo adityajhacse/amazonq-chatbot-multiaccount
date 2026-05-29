@@ -1,0 +1,292 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Amazon Q Developer Chatbot - Single Account Configuration (Deploy in each account separately)'
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: 'Slack Configuration'
+        Parameters:
+          - SlackWorkspaceId
+          - SlackChannelId
+          - SlackChannelName
+      - Label:
+          default: 'Configuration Naming'
+        Parameters:
+          - ConfigurationName
+          - ChatbotRoleName
+          - AccountNickname
+      - Label:
+          default: 'Settings'
+        Parameters:
+          - LoggingLevel
+    ParameterLabels:
+      SlackWorkspaceId:
+        default: 'Slack Workspace ID'
+      SlackChannelId:
+        default: 'Slack Channel ID'
+      AccountNickname:
+        default: 'Account Nickname'
+
+Parameters:
+  SlackWorkspaceId:
+    Type: String
+    Description: 'Slack workspace ID (format: T0XXXXXXXXX). Get from AWS Chatbot console after authorizing Slack.'
+    AllowedPattern: '^T[A-Z0-9]{8,}$'
+    ConstraintDescription: 'Must be a valid Slack workspace ID starting with T'
+
+  SlackChannelId:
+    Type: String
+    Description: 'Slack channel ID (format: C0XXXXXXXXX). All accounts will post to this same channel.'
+    AllowedPattern: '^C[A-Z0-9]{8,}$'
+    ConstraintDescription: 'Must be a valid Slack channel ID starting with C'
+
+  SlackChannelName:
+    Type: String
+    Default: 'amazonq-multi-account'
+    Description: 'Slack channel name (for display purposes only)'
+
+  ConfigurationName:
+    Type: String
+    Default: 'AmazonQ-Chatbot'
+    Description: 'Name for this AWS Chatbot configuration. Should be unique per account.'
+
+  ChatbotRoleName:
+    Type: String
+    Default: 'AmazonQ-Chatbot-Role'
+    Description: 'Name for the AWS Chatbot IAM role'
+    AllowedPattern: '^[a-zA-Z0-9+=,.@_-]{1,64}$'
+
+  AccountNickname:
+    Type: String
+    Default: ''
+    Description: 'Optional nickname for this account (e.g., "Production", "Development"). Will be added as a tag.'
+
+  LoggingLevel:
+    Type: String
+    Default: 'INFO'
+    AllowedValues:
+      - ERROR
+      - INFO
+      - NONE
+    Description: 'Logging level for AWS Chatbot'
+
+  CreateTestSNSTopic:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: 'Create a test SNS topic for notifications (recommended for testing)'
+
+Conditions:
+  HasAccountNickname: !Not [!Equals [!Ref AccountNickname, '']]
+  ShouldCreateSNSTopic: !Equals [!Ref CreateTestSNSTopic, 'true']
+
+Resources:
+  # IAM Role for AWS Chatbot
+  ChatbotRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref ChatbotRoleName
+      Description: 'IAM role for Amazon Q Developer Chatbot'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: chatbot.amazonaws.com
+            Action: 'sts:AssumeRole'
+            Condition:
+              StringEquals:
+                'aws:SourceAccount': !Ref 'AWS::AccountId'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/ReadOnlyAccess'
+        - 'arn:aws:iam::aws:policy/AmazonQDeveloperAccess'
+        - 'arn:aws:iam::aws:policy/AmazonQFullAccess'
+      Tags:
+        - Key: Name
+          Value: !Ref ChatbotRoleName
+        - Key: Project
+          Value: 'AmazonQ-Chatbot'
+        - Key: ManagedBy
+          Value: 'CloudFormation'
+        - !If
+          - HasAccountNickname
+          - Key: AccountNickname
+            Value: !Ref AccountNickname
+          - !Ref 'AWS::NoValue'
+
+
+  # SNS Topic for Notifications (Optional - for testing)
+  NotificationTopic:
+    Type: AWS::SNS::Topic
+    Condition: ShouldCreateSNSTopic
+    Properties:
+      TopicName: !Sub '${ConfigurationName}-Notifications'
+      DisplayName: !Sub 'Amazon Q Chatbot Notifications - ${AccountNickname}'
+      Tags:
+        - Key: Name
+          Value: !Sub '${ConfigurationName}-Notifications'
+        - Key: Project
+          Value: 'AmazonQ-Chatbot'
+        - Key: ManagedBy
+          Value: 'CloudFormation'
+
+  # SNS Topic Subscription to Chatbot
+  NotificationSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: ShouldCreateSNSTopic
+    Properties:
+      Protocol: email
+      TopicArn: !Ref NotificationTopic
+      Endpoint: !Sub 'amazonq-${AWS::AccountId}@example.com'
+
+  # CloudWatch Alarm for testing SNS notifications
+  TestAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: ShouldCreateSNSTopic
+    Properties:
+      AlarmName: !Sub '${ConfigurationName}-Test-Alarm'
+      AlarmDescription: 'Test alarm for Amazon Q Chatbot SNS notifications'
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref NotificationTopic
+      TreatMissingData: notBreaching
+
+  # AWS Chatbot Slack Configuration
+  SlackChannelConfiguration:
+    Type: AWS::Chatbot::SlackChannelConfiguration
+    Properties:
+      ConfigurationName: !Ref ConfigurationName
+      SlackWorkspaceId: !Ref SlackWorkspaceId
+      SlackChannelId: !Ref SlackChannelId
+      IamRoleArn: !GetAtt ChatbotRole.Arn
+      GuardrailPolicies:
+        - 'arn:aws:iam::aws:policy/ReadOnlyAccess'
+        - 'arn:aws:iam::aws:policy/AmazonQDeveloperAccess'
+        - 'arn:aws:iam::aws:policy/AmazonQFullAccess'
+      SnsTopicArns: !If
+        - ShouldCreateSNSTopic
+        - - !Ref NotificationTopic
+        - []
+      LoggingLevel: !Ref LoggingLevel
+      UserRoleRequired: false
+      Tags:
+        - Key: Name
+          Value: !Ref ConfigurationName
+        - Key: SlackChannel
+          Value: !Ref SlackChannelName
+        - Key: Project
+          Value: 'AmazonQ-Chatbot'
+        - Key: AccountId
+          Value: !Ref 'AWS::AccountId'
+        - !If
+          - HasAccountNickname
+          - Key: AccountNickname
+            Value: !Ref AccountNickname
+          - !Ref 'AWS::NoValue'
+
+  # CloudWatch Log Group for Chatbot
+  ChatbotLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/chatbot/${ConfigurationName}'
+      RetentionInDays: 30
+      Tags:
+        - Key: Name
+          Value: !Sub '${ConfigurationName}-logs'
+        - Key: AccountId
+          Value: !Ref 'AWS::AccountId'
+
+Outputs:
+  ChatbotRoleArn:
+    Description: 'ARN of the Chatbot IAM role'
+    Value: !GetAtt ChatbotRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ChatbotRoleArn'
+
+  ChatbotRoleName:
+    Description: 'Name of the Chatbot IAM role'
+    Value: !Ref ChatbotRoleName
+    Export:
+      Name: !Sub '${AWS::StackName}-ChatbotRoleName'
+
+  ChatbotConfigurationArn:
+    Description: 'ARN of the AWS Chatbot configuration'
+    Value: !Ref SlackChannelConfiguration
+
+  AccountId:
+    Description: 'AWS Account ID'
+    Value: !Ref 'AWS::AccountId'
+
+  SlackChannelId:
+    Description: 'Slack channel ID'
+    Value: !Ref SlackChannelId
+
+  CloudWatchLogGroup:
+    Description: 'CloudWatch Log Group for Chatbot logs'
+    Value: !Ref ChatbotLogGroup
+
+  SNSTopicArn:
+    Condition: ShouldCreateSNSTopic
+    Description: 'ARN of the SNS topic for notifications'
+    Value: !Ref NotificationTopic
+    Export:
+      Name: !Sub '${AWS::StackName}-SNSTopicArn'
+
+  SNSTopicName:
+    Condition: ShouldCreateSNSTopic
+    Description: 'Name of the SNS topic'
+    Value: !GetAtt NotificationTopic.TopicName
+
+  TestAlarmName:
+    Condition: ShouldCreateSNSTopic
+    Description: 'Name of the test CloudWatch alarm'
+    Value: !Ref TestAlarm
+
+  DeploymentInstructions:
+    Description: 'How to use this deployment'
+    Value: !If
+      - ShouldCreateSNSTopic
+      - !Sub |
+          ✅ AWS Chatbot configured for account ${AWS::AccountId}
+
+          Slack Channel: ${SlackChannelName}
+          SNS Topic: ${NotificationTopic.TopicName}
+          Test Alarm: ${TestAlarm}
+
+          To query this account in Slack:
+          1. Type: @Amazon Q help
+          2. Ask questions like:
+             - @Amazon Q list ec2 instances
+             - @Amazon Q show s3 buckets
+             - @Amazon Q describe cloudwatch alarms
+
+          To test SNS notifications:
+          1. Publish to SNS topic: ${NotificationTopic}
+          2. Trigger test alarm: ${TestAlarm}
+          3. Messages will appear in Slack channel
+
+          All messages from this account will appear in the same Slack channel.
+          Deploy this same template to other accounts to query multiple accounts from one channel.
+      - !Sub |
+          ✅ AWS Chatbot configured for account ${AWS::AccountId}
+
+          Slack Channel: ${SlackChannelName}
+
+          To query this account in Slack:
+          1. Type: @Amazon Q help
+          2. Ask questions like:
+             - @Amazon Q list ec2 instances
+             - @Amazon Q show s3 buckets
+             - @Amazon Q describe vpc resources
+
+          All messages from this account will appear in the same Slack channel.
+          Deploy this same template to other accounts to query multiple accounts from one channel.

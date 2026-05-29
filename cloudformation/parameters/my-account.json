@@ -1,0 +1,30 @@
+[
+  {
+    "ParameterKey": "SlackWorkspaceId",
+    "ParameterValue": "T04SR5XV56X"
+  },
+  {
+    "ParameterKey": "SlackChannelId",
+    "ParameterValue": "C0B5UE340PP"
+  },
+  {
+    "ParameterKey": "SlackChannelName",
+    "ParameterValue": "amazonq-slk-multi-account"
+  },
+  {
+    "ParameterKey": "ConfigurationName",
+    "ParameterValue": "AmazonQ-Primary-Account-aj"
+  },
+  {
+    "ParameterKey": "ChatbotRoleName",
+    "ParameterValue": "AmazonQ-Chatbot-Role-aj"
+  },
+  {
+    "ParameterKey": "AccountNickname",
+    "ParameterValue": "Primary-aj"
+  },
+  {
+    "ParameterKey": "LoggingLevel",
+    "ParameterValue": "INFO"
+  }
+]

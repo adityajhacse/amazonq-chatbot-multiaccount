@@ -1,0 +1,22 @@
+# Copy this file to terraform.tfvars and update with your values
+
+# Slack Configuration (Required)
+slack_workspace_id = "T04SR5XV56X"
+slack_channel_id   = "C0B5UE340PP"
+slack_channel_name = "amazonq-multi-account"
+
+# Configuration Naming
+configuration_name = "AmazonQ-Primary-Account"
+chatbot_role_name  = "AmazonQ-Chatbot-Role"
+account_nickname   = "Primary"
+
+# Settings
+logging_level         = "INFO"
+create_test_sns_topic = true
+log_retention_days    = 30
+
+# Additional tags (optional)
+tags = {
+  Environment = "Production"
+  Team        = "Platform"
+}

@@ -1,0 +1,190 @@
+================================================================================
+Amazon Q Developer Chatbot - Multi-Account Slack Integration
+================================================================================
+
+PROJECT STRUCTURE
+-----------------
+amazonq-chatbot-aditya/
+├── README.md                                           # Complete documentation
+├── cloudformation/
+│   ├── amazonq-chatbot-account.yaml                   # CloudFormation template (use for ALL accounts)
+│   └── parameters/
+│       ├── amazonq-chatbot-account.json.example       # Example parameter file
+│       └── amazonq-chatbot-account-primary.json       # Sample for primary account
+└── scripts/
+    └── deploy-multi-account.sh                         # Deployment helper script
+
+TOTAL FILES: 5
+
+
+HOW IT WORKS
+------------
+1. One CloudFormation template (amazonq-chatbot-account.yaml) for ALL accounts
+2. Each account gets its own parameter file (optional - can use CLI parameters)
+3. All accounts connect to the SAME Slack channel
+4. Each account responds independently when you query resources
+
+
+DEPLOYMENT STEPS
+----------------
+
+Step 1: Create parameter file for each account
+   cd cloudformation/parameters
+   cp amazonq-chatbot-account.json.example account1.json
+   # Edit account1.json with your Slack IDs
+
+Step 2: Deploy to each account
+   export AWS_PROFILE=account1-profile
+   cd cloudformation
+   aws cloudformation create-stack \
+     --stack-name amazonq-chatbot \
+     --template-body file://amazonq-chatbot-account.yaml \
+     --parameters file://parameters/account1.json \
+     --capabilities CAPABILITY_NAMED_IAM
+
+Step 3: Repeat Step 2 for each account (use same Slack IDs, different ConfigurationName)
+
+Step 4: Test in Slack
+   @Amazon Q list ec2 instances
+
+
+KEY CONFIGURATION
+-----------------
+MUST BE SAME for all accounts:
+  - SlackWorkspaceId: T04SR5XV56X
+  - SlackChannelId: C0B5UE340PP
+
+MUST BE UNIQUE per account:
+  - ConfigurationName: e.g., "AmazonQ-Production", "AmazonQ-Dev"
+
+Optional (helps identify responses):
+  - AccountNickname: e.g., "Production", "Development"
+
+
+EXAMPLE: Deploy to 3 accounts
+------------------------------
+
+Account 1 (Primary - 916657620953):
+  ConfigurationName: "AmazonQ-Primary"
+  AccountNickname: "Primary"
+
+Account 2 (Development - 427827265613):
+  ConfigurationName: "AmazonQ-Dev"
+  AccountNickname: "Development"
+
+Account 3 (Production - 888054366042):
+  ConfigurationName: "AmazonQ-Prod"
+  AccountNickname: "Production"
+
+
+SLACK USAGE
+-----------
+Query: @Amazon Q list ec2 instances
+
+Response from ALL accounts:
+  [Primary - 916657620953]
+  - i-123456 (web-server) - running
+
+  [Development - 427827265613]
+  - i-345678 (test-server) - running
+
+  [Production - 888054366042]
+  - i-456789 (prod-web) - running
+
+
+FILES EXPLAINED
+---------------
+
+README.md
+  Complete documentation with:
+  - Architecture diagram
+  - Quick start guide
+  - Deployment examples
+  - Troubleshooting
+  - Common Slack queries
+
+cloudformation/amazonq-chatbot-account.yaml
+  CloudFormation template that creates:
+  - IAM Role with:
+      * AdministratorAccess (full AWS permissions)
+      * AmazonQDeveloperAccess (Amazon Q Developer features)
+      * AmazonQFullAccess (complete Amazon Q capabilities)
+  - AWS Chatbot Slack configuration with ReadOnlyAccess guardrail
+  - CloudWatch Log Group
+
+  Security: Role has admin + Amazon Q permissions, guardrail restricts to read-only
+
+parameters/amazonq-chatbot-account.json.example
+  Example parameter file showing all available options
+  Copy and customize for each account
+
+parameters/amazonq-chatbot-account-primary.json
+  Sample parameter file for primary account (916657620953)
+  Pre-configured with your Slack IDs
+
+scripts/deploy-multi-account.sh
+  Interactive deployment script that:
+  - Checks current AWS identity
+  - Prompts before deploying
+  - Handles stack creation/updates
+  - Shows deployment outputs
+
+
+QUICK DEPLOYMENT
+----------------
+Using the script:
+  cd scripts
+  export AWS_PROFILE=your-account-profile
+  ./deploy-multi-account.sh
+
+Manual deployment:
+  cd cloudformation
+  aws cloudformation create-stack \
+    --stack-name amazonq-chatbot \
+    --template-body file://amazonq-chatbot-account.yaml \
+    --parameters ParameterKey=SlackWorkspaceId,ParameterValue=T04SR5XV56X \
+                 ParameterKey=SlackChannelId,ParameterValue=C0B5UE340PP \
+                 ParameterKey=ConfigurationName,ParameterValue=AmazonQ-MyAccount \
+                 ParameterKey=AccountNickname,ParameterValue=MyAccount \
+    --capabilities CAPABILITY_NAMED_IAM
+
+
+VERIFICATION
+------------
+Check stack status:
+  aws cloudformation describe-stacks --stack-name amazonq-chatbot
+
+List Chatbot configurations:
+  aws chatbot describe-slack-channel-configurations
+
+View CloudWatch logs:
+  aws logs tail /aws/chatbot/AmazonQ-Primary --follow
+
+
+CLEANUP
+-------
+Remove from an account:
+  aws cloudformation delete-stack --stack-name amazonq-chatbot
+
+
+COST
+----
+Per account: ~$0.50/month (CloudWatch Logs only)
+3 accounts: ~$1.50/month
+10 accounts: ~$5.00/month
+
+
+SUPPORT
+-------
+See README.md for:
+  - Troubleshooting guide
+  - Common issues and solutions
+  - Slack query examples
+  - AWS resources documentation
+
+
+================================================================================
+Version: 2.0 - Simplified (No child account concept)
+Last Updated: 2026-05-25
+Author: Aditya Jha
+================================================================================
